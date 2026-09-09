@@ -100,12 +100,16 @@ type CoachResult struct {
 
 // InterviewQuestionInput holds all context needed to generate a practice interview question.
 type InterviewQuestionInput struct {
-	Kind              string // "behavioral" | "technical" | "situational" | "screening"
-	JobTitle          string
-	CompanyName       string
-	JobDescription    string
-	MatchedKeywords   []string
-	MissingKeywords   []string
+	Kind            string // "behavioral" | "technical" | "situational" | "screening"
+	JobTitle        string
+	CompanyName     string
+	JobDescription  string
+	MatchedKeywords []string
+	MissingKeywords []string
+	// TargetGaps combina MissingKeywords (do PipelineJob) + MissingRequirements (do
+	// OptimizedResume, em frase) — gaps reais do currículo pra essa vaga específica, pra
+	// priorizar na geração da pergunta (spec 012), não é só contexto passivo.
+	TargetGaps        []string
 	ResumeData        map[string]interface{}
 	PreviousQuestions []string // pra não repetir tema
 	PastGaps          []string // gaps de respostas anteriores, pra mirar nos pontos fracos

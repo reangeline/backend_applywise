@@ -724,6 +724,19 @@ func (s *aiServiceImpl) GenerateInterviewQuestion(ctx context.Context, input *ou
 		guidance = interviewKindGuidance[kind]
 	}
 
+	// Spec 012: quando existem gaps reais do currículo pra essa vaga (TargetGaps), a
+	// pergunta deve sondar de propósito um deles — não é mais um item de contexto passivo
+	// entre vários. Sem gaps (vaga nunca otimizada), mantém o comportamento genérico de
+	// sempre, sem essa instrução extra.
+	targetGapsInstruction := "No specific résumé gaps identified for this role yet — generate a well-rounded question for the target role."
+	if len(input.TargetGaps) > 0 {
+		targetGapsJSON, _ := json.Marshal(input.TargetGaps)
+		targetGapsInstruction = fmt.Sprintf(
+			"PRIORITIZE generating a question that probes one of these real gaps between the candidate's résumé and this job (pick one not already clearly covered by the questions already asked below): %s",
+			string(targetGapsJSON),
+		)
+	}
+
 	prompt := fmt.Sprintf(`You are a realistic interviewer for tech roles, helping a candidate practice for a real interview.
 
 Generate ONE %s interview question. %s
@@ -733,9 +746,9 @@ Target role: %s
 Company: %s
 Job description excerpt: %s
 Matched keywords/skills: %s
-Missing keywords/skills: %s
+%s
 Questions already asked in this practice session (do NOT repeat the theme): %s
-Weak spots from past answers in this session (probe these if relevant): %s
+Weak spots from past answers in this session (secondary signal — probe these if no uncovered target gap remains): %s
 
 Return ONLY a JSON object:
 {"question": "the interview question, in natural spoken English",
@@ -744,7 +757,7 @@ Return ONLY a JSON object:
 		kind, guidance, string(resumeJSON), input.JobTitle, input.CompanyName,
 		truncate(input.JobDescription, 600),
 		strings.Join(input.MatchedKeywords, ", "),
-		strings.Join(input.MissingKeywords, ", "),
+		targetGapsInstruction,
 		string(previousJSON), string(gapsJSON),
 	)
 
