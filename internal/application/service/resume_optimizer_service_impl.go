@@ -170,13 +170,6 @@ func (s *resumeOptimizerServiceImpl) runOptimization(
 		return nil, domain.ErrSubscriptionInactive
 	}
 
-	// Usuários premium tem uso ilimitado, usuários free precisam de créditos
-	if subscription.Plan == domain.PlanFree {
-		if subscription.Credits <= 0 {
-			return nil, domain.ErrInsufficientCredits
-		}
-	}
-
 	// Busca todos os currículos do usuário
 	resumes, err := s.resumeRepo.ListResumesByUserID(ctx, req.UserID)
 	if err != nil {
@@ -274,32 +267,6 @@ func (s *resumeOptimizerServiceImpl) runOptimization(
 				Notes:      salaryEst.Notes,
 				Disclaimer: salaryEst.Disclaimer,
 			}
-		}
-	}
-
-	// ✅ Consumir crédito APENAS para usuários free tier (premium tem uso ilimitado)
-	if subscription.Plan == domain.PlanFree {
-		if err := subscription.UseCredit(); err != nil {
-			return nil, err
-		}
-
-		// Registrar transação
-		transaction := domain.NewCreditTransaction(
-			req.UserID,
-			1,
-			domain.CreditTransactionTypeUse,
-			"Resume optimization",
-		)
-		transaction.Metadata["resume_id"] = req.ResumeID
-
-		if err := s.creditTransactionRepo.Create(ctx, transaction); err != nil {
-			// Log mas não falha se não conseguir registrar
-			log.Printf("[credit] failed to record transaction: userID=%s resumeID=%s err=%v", req.UserID, req.ResumeID, err)
-		}
-
-		// Atualizar subscription
-		if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
-			return nil, err
 		}
 	}
 
@@ -528,13 +495,6 @@ func (s *resumeOptimizerServiceImpl) ProcessLinkedInOptimizationJob(
 		return nil, domain.ErrSubscriptionInactive
 	}
 
-	if subscription.Plan == domain.PlanFree {
-		if subscription.Credits <= 0 {
-			_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, domain.ErrInsufficientCredits.Error(), "")
-			return nil, domain.ErrInsufficientCredits
-		}
-	}
-
 	// Fetch resume
 	resume, err := s.resumeRepo.GetResume(ctx, req.UserID, req.ResumeID)
 	if err != nil {
@@ -555,29 +515,6 @@ func (s *resumeOptimizerServiceImpl) ProcessLinkedInOptimizationJob(
 	if err != nil {
 		_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, err.Error(), "")
 		return nil, err
-	}
-
-	// Deduct credit for free users
-	if subscription.Plan == domain.PlanFree {
-		if err := subscription.UseCredit(); err != nil {
-			_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, err.Error(), "")
-			return nil, err
-		}
-
-		transaction := domain.NewCreditTransaction(
-			req.UserID,
-			1,
-			domain.CreditTransactionTypeUse,
-			"LinkedIn profile optimization",
-		)
-		transaction.Metadata["resume_id"] = req.ResumeID
-
-		_ = s.creditTransactionRepo.Create(ctx, transaction)
-
-		if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
-			_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, err.Error(), "")
-			return nil, err
-		}
 	}
 
 	// Persist result as an OptimizedResume with type=linkedin
