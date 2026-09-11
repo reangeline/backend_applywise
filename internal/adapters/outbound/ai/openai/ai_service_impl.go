@@ -19,7 +19,7 @@ const (
 	defaultModel              = "gpt-4.1-mini" // Parse, salary: cheap and fast
 	optimizationModel         = "gpt-4.1"      // Resume & LinkedIn optimization: higher quality
 	parseMaxTokens            = 800            // Sufficient for parse responses
-	optimizeMaxTokens         = 1800           // Large enough for full optimization JSON
+	optimizeMaxTokens         = 3500           // Full resume rewrite (all experiences/education/projects) + suggestions
 	linkedInMaxTokens         = 3200           // LinkedIn needs more tokens (longer about + suggestions)
 	defaultHTTPTimeout        = 90 * time.Second
 	perAttemptTimeout         = 25 * time.Second // regular calls
@@ -724,6 +724,19 @@ func (s *aiServiceImpl) GenerateInterviewQuestion(ctx context.Context, input *ou
 		guidance = interviewKindGuidance[kind]
 	}
 
+	// Spec 012: quando existem gaps reais do currículo pra essa vaga (TargetGaps), a
+	// pergunta deve sondar de propósito um deles — não é mais um item de contexto passivo
+	// entre vários. Sem gaps (vaga nunca otimizada), mantém o comportamento genérico de
+	// sempre, sem essa instrução extra.
+	targetGapsInstruction := "No specific résumé gaps identified for this role yet — generate a well-rounded question for the target role."
+	if len(input.TargetGaps) > 0 {
+		targetGapsJSON, _ := json.Marshal(input.TargetGaps)
+		targetGapsInstruction = fmt.Sprintf(
+			"PRIORITIZE generating a question that probes one of these real gaps between the candidate's résumé and this job (pick one not already clearly covered by the questions already asked below): %s",
+			string(targetGapsJSON),
+		)
+	}
+
 	prompt := fmt.Sprintf(`You are a realistic interviewer for tech roles, helping a candidate practice for a real interview.
 
 Generate ONE %s interview question. %s
@@ -733,9 +746,9 @@ Target role: %s
 Company: %s
 Job description excerpt: %s
 Matched keywords/skills: %s
-Missing keywords/skills: %s
+%s
 Questions already asked in this practice session (do NOT repeat the theme): %s
-Weak spots from past answers in this session (probe these if relevant): %s
+Weak spots from past answers in this session (secondary signal — probe these if no uncovered target gap remains): %s
 
 Return ONLY a JSON object:
 {"question": "the interview question, in natural spoken English",
@@ -744,7 +757,7 @@ Return ONLY a JSON object:
 		kind, guidance, string(resumeJSON), input.JobTitle, input.CompanyName,
 		truncate(input.JobDescription, 600),
 		strings.Join(input.MatchedKeywords, ", "),
-		strings.Join(input.MissingKeywords, ", "),
+		targetGapsInstruction,
 		string(previousJSON), string(gapsJSON),
 	)
 
@@ -858,6 +871,55 @@ Be honest — a rambling answer without a clear outcome should score low on cont
 		}
 	}
 	return result, nil
+}
+
+const applyAssistMaxTokens = 300
+
+func (s *aiServiceImpl) SuggestApplyAnswer(ctx context.Context, input *outbound.ApplyAssistAnswerInput) (*outbound.ApplyAssistAnswerResult, error) {
+	resumeJSON, _ := json.Marshal(input.ResumeData)
+
+	prompt := fmt.Sprintf(`You are helping a candidate fill out a job application screening question (e.g. LinkedIn Easy Apply custom question).
+
+Question: %s
+Target role: %s
+Company: %s
+Job description excerpt: %s
+Candidate's resume data (JSON): %s
+
+Suggest a short, honest, first-person answer based ONLY on the candidate's real resume data
+above — never invent experience, years, or skills the candidate doesn't have. If the
+question asks for a number (years of experience, salary expectation) and the resume doesn't
+give enough to infer it confidently, say so plainly instead of guessing. Keep it to 1-3
+sentences, ready to paste into a form field.
+
+Return ONLY a JSON object:
+{"suggested_answer": "the answer, first person, ready to use"}`,
+		input.Question, input.JobTitle, input.CompanyName,
+		truncate(input.JobDescription, 600), string(resumeJSON),
+	)
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, applyAssistMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		SuggestedAnswer string `json:"suggested_answer"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse apply-assist answer: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse apply-assist answer (cleaned): %w", err2)
+		}
+	}
+	if raw.SuggestedAnswer == "" {
+		return nil, fmt.Errorf("AI returned empty apply-assist answer")
+	}
+
+	return &outbound.ApplyAssistAnswerResult{SuggestedAnswer: raw.SuggestedAnswer}, nil
 }
 
 // truncate shortens a string to at most n runes.

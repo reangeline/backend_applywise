@@ -15,6 +15,7 @@ var (
 	ErrSubscriptionInactive        = errors.New("subscription is not active")
 	ErrInvalidPlan                 = errors.New("invalid subscription plan")
 	ErrInsufficientCredits         = errors.New("insufficient credits")
+	ErrPremiumRequired             = errors.New("premium subscription required")
 
 	// Resume errors
 	ErrResumeNotFound = errors.New("resume not found")

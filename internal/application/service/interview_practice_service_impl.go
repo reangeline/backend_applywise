@@ -38,22 +38,31 @@ func NewInterviewPracticeService(
 	}
 }
 
-// resumeDataFor busca os dados estruturados do currículo ligado à vaga, se houver. Best
-// effort: uma vaga adicionada rápido (sem otimização) pode não ter currículo vinculado —
-// nesse caso a pergunta/avaliação seguem sem esses dados, só menos personalizadas.
-func (s *interviewPracticeServiceImpl) resumeDataFor(ctx context.Context, userID string, job *domain.PipelineJob) map[string]interface{} {
-	resumeID := job.OptimizedResumeID
-	if resumeID == "" {
-		resumeID = job.ResumeID
+// resumeDataFor busca os dados estruturados do currículo ligado à vaga, e os gaps mais
+// ricos (MissingRequirements, em frase) quando a vaga já passou por otimização — esses só
+// existem no OptimizedResume, não no PipelineJob. Best effort: uma vaga adicionada rápido
+// (sem otimização) pode não ter currículo vinculado — nesse caso a pergunta/avaliação
+// seguem sem esses dados, só menos personalizadas.
+//
+// Corrige um bug real: antes disso, a busca sempre usava GetResume mesmo quando
+// job.OptimizedResumeID estava setado — mas esse ID pertence à tabela de OptimizedResume,
+// não à de Resume, então ResumeData chegava vazio no prompt pra toda vaga já otimizada
+// (o erro era engolido silenciosamente).
+func (s *interviewPracticeServiceImpl) resumeDataFor(ctx context.Context, userID string, job *domain.PipelineJob) (map[string]interface{}, []string) {
+	if job.OptimizedResumeID != "" {
+		optimized, err := s.resumeRepo.GetOptimizedResume(ctx, userID, job.OptimizedResumeID)
+		if err == nil && optimized != nil {
+			return optimized.ParsedData, optimized.MissingRequirements
+		}
 	}
-	if resumeID == "" {
-		return nil
+	if job.ResumeID == "" {
+		return nil, nil
 	}
-	resume, err := s.resumeRepo.GetResume(ctx, userID, resumeID)
+	resume, err := s.resumeRepo.GetResume(ctx, userID, job.ResumeID)
 	if err != nil || resume == nil {
-		return nil
+		return nil, nil
 	}
-	return resume.ParsedData
+	return resume.ParsedData, nil
 }
 
 func (s *interviewPracticeServiceImpl) NextQuestion(ctx context.Context, req inbound.NextQuestionRequest) (*inbound.InterviewQuestionDTO, error) {
@@ -89,6 +98,14 @@ func (s *interviewPracticeServiceImpl) NextQuestion(ctx context.Context, req inb
 		pastGaps = append(pastGaps, h.Gaps...)
 	}
 
+	resumeData, missingRequirements := s.resumeDataFor(ctx, req.UserID, job)
+
+	// TargetGaps combina os dois sinais de gap real da vaga: MissingKeywords (palavras-chave
+	// soltas, sempre no PipelineJob) + MissingRequirements (a versão mais rica, em frase, só
+	// disponível quando a vaga passou por otimização) — sondar de propósito na entrevista,
+	// não é só contexto passivo (ver GenerateInterviewQuestion).
+	targetGaps := append(append([]string{}, job.MissingKeywords...), missingRequirements...)
+
 	result, err := s.aiService.GenerateInterviewQuestion(ctx, &outbound.InterviewQuestionInput{
 		Kind:              kind,
 		JobTitle:          job.JobTitle,
@@ -96,7 +113,8 @@ func (s *interviewPracticeServiceImpl) NextQuestion(ctx context.Context, req inb
 		JobDescription:    jobDescription,
 		MatchedKeywords:   job.MatchedKeywords,
 		MissingKeywords:   job.MissingKeywords,
-		ResumeData:        s.resumeDataFor(ctx, req.UserID, job),
+		TargetGaps:        targetGaps,
+		ResumeData:        resumeData,
 		PreviousQuestions: previousQuestions,
 		PastGaps:          pastGaps,
 	})
@@ -157,13 +175,14 @@ func (s *interviewPracticeServiceImpl) SubmitAnswer(ctx context.Context, req inb
 		}
 	}
 
+	resumeData, _ := s.resumeDataFor(ctx, req.UserID, job)
 	eval, err := s.aiService.EvaluateInterviewAnswer(ctx, &outbound.InterviewAnswerInput{
 		Kind:            string(question.Kind),
 		Question:        question.Question,
 		JobTitle:        job.JobTitle,
 		CompanyName:     job.CompanyName,
 		JobDescription:  jobDescription,
-		ResumeData:      s.resumeDataFor(ctx, req.UserID, job),
+		ResumeData:      resumeData,
 		CandidateAnswer: answer,
 	})
 	if err != nil {

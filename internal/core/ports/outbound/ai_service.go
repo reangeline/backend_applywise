@@ -100,12 +100,16 @@ type CoachResult struct {
 
 // InterviewQuestionInput holds all context needed to generate a practice interview question.
 type InterviewQuestionInput struct {
-	Kind              string // "behavioral" | "technical" | "situational" | "screening"
-	JobTitle          string
-	CompanyName       string
-	JobDescription    string
-	MatchedKeywords   []string
-	MissingKeywords   []string
+	Kind            string // "behavioral" | "technical" | "situational" | "screening"
+	JobTitle        string
+	CompanyName     string
+	JobDescription  string
+	MatchedKeywords []string
+	MissingKeywords []string
+	// TargetGaps combina MissingKeywords (do PipelineJob) + MissingRequirements (do
+	// OptimizedResume, em frase) — gaps reais do currículo pra essa vaga específica, pra
+	// priorizar na geração da pergunta (spec 012), não é só contexto passivo.
+	TargetGaps        []string
 	ResumeData        map[string]interface{}
 	PreviousQuestions []string // pra não repetir tema
 	PastGaps          []string // gaps de respostas anteriores, pra mirar nos pontos fracos
@@ -147,6 +151,21 @@ type InterviewAnswerResult struct {
 	FollowUp     string
 }
 
+// ApplyAssistAnswerInput holds the context needed to suggest an answer to an application
+// screening question (Easy Apply custom questions, e.g. "years of experience with X").
+type ApplyAssistAnswerInput struct {
+	Question       string
+	JobTitle       string
+	CompanyName    string
+	JobDescription string
+	ResumeData     map[string]interface{}
+}
+
+// ApplyAssistAnswerResult holds the AI-suggested answer.
+type ApplyAssistAnswerResult struct {
+	SuggestedAnswer string
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -158,4 +177,5 @@ type AIService interface {
 	GenerateCoachContent(ctx context.Context, input *CoachJobInput) (*CoachResult, error)
 	GenerateInterviewQuestion(ctx context.Context, input *InterviewQuestionInput) (*InterviewQuestionResult, error)
 	EvaluateInterviewAnswer(ctx context.Context, input *InterviewAnswerInput) (*InterviewAnswerResult, error)
+	SuggestApplyAnswer(ctx context.Context, input *ApplyAssistAnswerInput) (*ApplyAssistAnswerResult, error)
 }

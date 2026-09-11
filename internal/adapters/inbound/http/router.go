@@ -26,6 +26,7 @@ func NewRouter(
 	notifier outbound.NotificationPublisher,
 	pipelineCoachService inbound.PipelineCoachService,
 	interviewPracticeService inbound.InterviewPracticeService,
+	applyAssistService inbound.ApplyAssistService,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -64,6 +65,7 @@ func NewRouter(
 	revenueCatWebhookHandler := handler.NewRevenueCatWebhookHandler(revenueCatService)
 	userHandler := handler.NewUserHandler(userService)
 	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService, interviewPracticeService)
+	applyAssistHandler := handler.NewApplyAssistHandler(applyAssistService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -139,6 +141,11 @@ func NewRouter(
 			r.Get("/pipeline/{jobId}/interview-practice", pipelineHandler.ListInterviewQuestions)
 			r.Post("/pipeline/{jobId}/interview-practice/question", pipelineHandler.NextInterviewQuestion)
 			r.Post("/pipeline/{jobId}/interview-practice/{questionId}/answer", pipelineHandler.SubmitInterviewAnswer)
+
+			// Apply-assist (spec 011) — assiste preenchimento de candidatura fora do produto
+			// (extensão de navegador). Não fica sob /pipeline/{jobId} porque acontece antes de
+			// a vaga existir no board (só é registrada depois que o usuário confirma o envio).
+			r.Post("/apply-assist/answer", applyAssistHandler.SuggestAnswer)
 		})
 	})
 

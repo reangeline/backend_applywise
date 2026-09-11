@@ -48,7 +48,7 @@ variable "stripe_price_premium_monthly" {
 variable "web_app_base_url" {
   description = "Base URL do web-app, usada nas URLs de sucesso/cancelamento do Stripe Checkout"
   type        = string
-  default     = "http://localhost:3000"
+  default     = "https://hirefy-web-git-develop-reangelinehotmailcoms-projects.vercel.app"
 }
 
 variable "ses_from_email" {

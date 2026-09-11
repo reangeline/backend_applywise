@@ -85,6 +85,7 @@ func init() {
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	interviewPracticeService := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
+	applyAssistService := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
@@ -106,6 +107,7 @@ func init() {
 		fcmNotifier,
 		pipelineCoachService,
 		interviewPracticeService,
+		applyAssistService,
 	)
 
 	// Configura Lambda adapter
@@ -176,6 +178,7 @@ func runLocalServer() {
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 	pipelineCoachSvc := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	interviewPracticeSvc := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
+	applyAssistSvc := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
 
 	router := httpAdapter.NewRouter(
 		authService,
@@ -190,6 +193,7 @@ func runLocalServer() {
 		fcmNotifier,
 		pipelineCoachSvc,
 		interviewPracticeSvc,
+		applyAssistSvc,
 	)
 
 	port := os.Getenv("PORT")
