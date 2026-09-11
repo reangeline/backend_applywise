@@ -1019,3 +1019,46 @@ func (s *resumeOptimizerServiceImpl) ParsePDFResume(ctx context.Context, req inb
 		},
 	}, nil
 }
+
+// SuggestAddition sugere uma frase pra incorporar uma skill/requisito que a vaga pede e o
+// currículo não mostra (spec 014). Não persiste nada — o usuário revisa/edita antes de
+// salvar. Sem checagem de crédito/plano: resume stuff é grátis pra qualquer cadastrado
+// desde a spec 013.
+func (s *resumeOptimizerServiceImpl) SuggestAddition(ctx context.Context, req inbound.SuggestAdditionRequest) (*inbound.SuggestAdditionResult, error) {
+	resume, err := s.resumeRepo.GetResume(ctx, req.UserID, req.ResumeID)
+	if err != nil {
+		return nil, err
+	}
+
+	gap := security.SanitizeForPrompt(req.Gap)
+	if err := security.ValidateShortField(gap, "gap"); err != nil {
+		return nil, err
+	}
+	jobTitle := security.SanitizeForPrompt(req.JobTitle)
+	if err := security.ValidateShortField(jobTitle, "job title"); err != nil {
+		return nil, err
+	}
+	companyName := security.SanitizeForPrompt(req.CompanyName)
+	if err := security.ValidateShortField(companyName, "company name"); err != nil {
+		return nil, err
+	}
+	jobDescription := security.SanitizeForPrompt(req.JobDescription)
+	if jobDescription != "" {
+		if err := security.ValidateJobDescription(jobDescription); err != nil {
+			return nil, err
+		}
+	}
+
+	result, err := s.aiService.SuggestResumeAddition(ctx, &outbound.ResumeAdditionInput{
+		Gap:            gap,
+		JobTitle:       jobTitle,
+		CompanyName:    companyName,
+		JobDescription: jobDescription,
+		ResumeData:     resume.ParsedData,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &inbound.SuggestAdditionResult{SuggestedText: result.SuggestedText}, nil
+}

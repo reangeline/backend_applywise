@@ -922,6 +922,62 @@ Return ONLY a JSON object:
 	return &outbound.ApplyAssistAnswerResult{SuggestedAnswer: raw.SuggestedAnswer}, nil
 }
 
+// SuggestResumeAddition sugere uma frase pra incorporar uma skill/requisito que a vaga pede
+// e o currículo não mostra (spec 014).
+//
+// Decisão deliberada, diferente de SuggestApplyAnswer (que instrui a IA a nunca inventar
+// experiência): aqui a IA escreve a frase JÁ alegando a experiência, mesmo que o currículo
+// base não mostre isso — decisão explícita do usuário, depois de avisado do risco, porque o
+// ponto da feature é dar um rascunho pronto pra revisar/editar, não uma resposta factual
+// verificada. Não é inconsistência com o padrão de SuggestApplyAnswer, é escopo diferente:
+// lá é uma resposta pra vaga de verdade, aqui é um rascunho editável pelo próprio usuário
+// antes de qualquer coisa ser salva no currículo.
+func (s *aiServiceImpl) SuggestResumeAddition(ctx context.Context, input *outbound.ResumeAdditionInput) (*outbound.ResumeAdditionResult, error) {
+	resumeJSON, _ := json.Marshal(input.ResumeData)
+
+	prompt := fmt.Sprintf(`You are helping a candidate draft an addition to their resume's professional summary.
+
+The target job asks for: %s
+Target role: %s
+Company: %s
+Job description excerpt: %s
+Candidate's current resume data (JSON): %s
+
+Write ONE natural, first-person sentence claiming relevant experience with "%s", phrased so
+it could plausibly be added to the candidate's professional summary. This is a DRAFT the
+candidate will review and edit themselves before adding it — write it as a ready-to-use
+claim, not a hedge. Keep it concise (1 sentence).
+
+Return ONLY a JSON object:
+{"suggested_text": "the sentence, first person, ready to use"}`,
+		input.Gap, input.JobTitle, input.CompanyName,
+		truncate(input.JobDescription, 600), string(resumeJSON), input.Gap,
+	)
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.5, applyAssistMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		SuggestedText string `json:"suggested_text"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse resume addition response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse resume addition response (cleaned): %w", err2)
+		}
+	}
+	if raw.SuggestedText == "" {
+		return nil, fmt.Errorf("AI returned empty resume addition suggestion")
+	}
+
+	return &outbound.ResumeAdditionResult{SuggestedText: raw.SuggestedText}, nil
+}
+
 // truncate shortens a string to at most n runes.
 func truncate(s string, n int) string {
 	runes := []rune(s)

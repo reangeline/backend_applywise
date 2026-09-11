@@ -166,6 +166,21 @@ type ApplyAssistAnswerResult struct {
 	SuggestedAnswer string
 }
 
+// ResumeAdditionInput holds the context needed to suggest a sentence incorporating a
+// missing skill/requirement into the candidate's resume (spec 014).
+type ResumeAdditionInput struct {
+	Gap            string // a palavra-chave ou requisito faltando que a vaga pede
+	JobTitle       string
+	CompanyName    string
+	JobDescription string
+	ResumeData     map[string]interface{}
+}
+
+// ResumeAdditionResult holds the AI-suggested sentence.
+type ResumeAdditionResult struct {
+	SuggestedText string
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -178,4 +193,5 @@ type AIService interface {
 	GenerateInterviewQuestion(ctx context.Context, input *InterviewQuestionInput) (*InterviewQuestionResult, error)
 	EvaluateInterviewAnswer(ctx context.Context, input *InterviewAnswerInput) (*InterviewAnswerResult, error)
 	SuggestApplyAnswer(ctx context.Context, input *ApplyAssistAnswerInput) (*ApplyAssistAnswerResult, error)
+	SuggestResumeAddition(ctx context.Context, input *ResumeAdditionInput) (*ResumeAdditionResult, error)
 }

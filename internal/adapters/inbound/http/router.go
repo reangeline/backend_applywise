@@ -105,6 +105,7 @@ func NewRouter(
 			r.Get("/resumes/optimized/{optimizedID}", resumeHandler.GetOptimizedResume)
 			r.Put("/resumes/optimized/{optimizedID}", resumeHandler.UpdateOptimizedResume)
 			r.Delete("/resumes/{resumeID}", resumeHandler.DeleteResume)
+			r.Post("/resumes/{resumeID}/suggest-addition", resumeHandler.SuggestAddition)
 
 			r.Get("/resumes/optimize/jobs/{jobID}", resumeHandler.GetOptimizationJobStatus)
 

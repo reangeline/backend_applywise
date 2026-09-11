@@ -29,6 +29,13 @@ type OptimizeResumeRequestDTO struct {
 	TargetRole     string `json:"target_role,omitempty"`
 }
 
+type SuggestAdditionRequestDTO struct {
+	Gap            string `json:"gap" validate:"required"`
+	JobTitle       string `json:"job_title,omitempty"`
+	CompanyName    string `json:"company_name,omitempty"`
+	JobDescription string `json:"job_description,omitempty"`
+}
+
 type ManualResumeRequestDTO struct {
 	ResumeID        string                   `json:"resume_id,omitempty"`
 	Type            string                   `json:"type,omitempty"`
@@ -112,6 +119,32 @@ func (h *ResumeHandler) OptimizeResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusAccepted, job)
+}
+
+func (h *ResumeHandler) SuggestAddition(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
+	resumeID := chi.URLParam(r, "resumeID")
+
+	var req SuggestAdditionRequestDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := h.resumeService.SuggestAddition(r.Context(), inbound.SuggestAdditionRequest{
+		UserID:         userID,
+		ResumeID:       resumeID,
+		Gap:            req.Gap,
+		JobTitle:       req.JobTitle,
+		CompanyName:    req.CompanyName,
+		JobDescription: req.JobDescription,
+	})
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, result)
 }
 
 func (h *ResumeHandler) GetOptimizationJobStatus(w http.ResponseWriter, r *http.Request) {

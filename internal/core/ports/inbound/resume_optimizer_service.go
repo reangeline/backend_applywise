@@ -71,6 +71,22 @@ type ParsePDFResumeRequest struct {
 	FileName string
 }
 
+// SuggestAdditionRequest carries the context needed to suggest a sentence incorporating a
+// missing skill/requirement into the candidate's resume (spec 014).
+type SuggestAdditionRequest struct {
+	UserID         string
+	ResumeID       string
+	Gap            string
+	JobTitle       string
+	CompanyName    string
+	JobDescription string
+}
+
+// SuggestAdditionResult holds the AI-suggested sentence.
+type SuggestAdditionResult struct {
+	SuggestedText string
+}
+
 // ResumeOptimizerService define os casos de uso de otimização de currículo
 type ResumeOptimizerService interface {
 	UploadResume(ctx context.Context, req UploadResumeRequest) (*domain.Resume, error)
@@ -94,4 +110,8 @@ type ResumeOptimizerService interface {
 	// ParsePDFResume extracts structured resume data from a PDF file using AI.
 	// It does NOT persist anything — the result is intended to pre-fill the manual resume form on the client.
 	ParsePDFResume(ctx context.Context, req ParsePDFResumeRequest) (map[string]interface{}, error)
+
+	// SuggestAddition sugere uma frase pra incorporar uma skill/requisito faltando (spec 014).
+	// Não persiste nada — o resultado é um rascunho pro usuário revisar antes de salvar.
+	SuggestAddition(ctx context.Context, req SuggestAdditionRequest) (*SuggestAdditionResult, error)
 }
