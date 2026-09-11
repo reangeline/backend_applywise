@@ -77,17 +77,18 @@ type PipelineJobResponse struct {
 }
 
 type createPipelineJobRequest struct {
-	CompanyName     string   `json:"company_name"`
-	JobTitle        string   `json:"job_title"`
-	Location        string   `json:"location,omitempty"`
-	Stage           string   `json:"stage,omitempty"`
-	ResumeID        string   `json:"resume_id,omitempty"`
-	AtsScore        int      `json:"ats_score,omitempty"`
-	MatchedKeywords []string `json:"matched_keywords,omitempty"`
-	MissingKeywords []string `json:"missing_keywords,omitempty"`
-	JobDescription  string   `json:"job_description,omitempty"`
-	JobURL          string   `json:"job_url,omitempty"`
-	IsArchived      bool     `json:"is_archived,omitempty"`
+	CompanyName       string   `json:"company_name"`
+	JobTitle          string   `json:"job_title"`
+	Location          string   `json:"location,omitempty"`
+	Stage             string   `json:"stage,omitempty"`
+	ResumeID          string   `json:"resume_id,omitempty"`
+	OptimizedResumeID string   `json:"optimized_resume_id,omitempty"`
+	AtsScore          int      `json:"ats_score,omitempty"`
+	MatchedKeywords   []string `json:"matched_keywords,omitempty"`
+	MissingKeywords   []string `json:"missing_keywords,omitempty"`
+	JobDescription    string   `json:"job_description,omitempty"`
+	JobURL            string   `json:"job_url,omitempty"`
+	IsArchived        bool     `json:"is_archived,omitempty"`
 }
 
 type updatePipelineJobRequest struct {
@@ -203,21 +204,22 @@ func (h *PipelineHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	job := &domain.PipelineJob{
-		ID:              uuid.New().String(),
-		UserID:          userID,
-		CompanyName:     req.CompanyName,
-		JobTitle:        req.JobTitle,
-		Location:        req.Location,
-		Stage:           stage,
-		ResumeID:        req.ResumeID,
-		AtsScore:        req.AtsScore,
-		MatchedKeywords: req.MatchedKeywords,
-		MissingKeywords: req.MissingKeywords,
-		JobDescription:  req.JobDescription,
-		JobURL:          req.JobURL,
-		IsArchived:      req.IsArchived,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                uuid.New().String(),
+		UserID:            userID,
+		CompanyName:       req.CompanyName,
+		JobTitle:          req.JobTitle,
+		Location:          req.Location,
+		Stage:             stage,
+		ResumeID:          req.ResumeID,
+		OptimizedResumeID: req.OptimizedResumeID,
+		AtsScore:          req.AtsScore,
+		MatchedKeywords:   req.MatchedKeywords,
+		MissingKeywords:   req.MissingKeywords,
+		JobDescription:    req.JobDescription,
+		JobURL:            req.JobURL,
+		IsArchived:        req.IsArchived,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
 	// Add initial timeline event
