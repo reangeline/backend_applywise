@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
 )
 
@@ -976,6 +977,135 @@ Return ONLY a JSON object:
 	}
 
 	return &outbound.ResumeAdditionResult{SuggestedText: raw.SuggestedText}, nil
+}
+
+const linkedInScanMaxTokens = 2200
+
+// ScanLinkedInProfile audits the text extracted from a user's LinkedIn profile PDF export
+// against a fixed checklist (spec 015) — inspired by Jobscan's "LinkedIn Scan Report", but
+// scoped to what's honestly derivable from plain text (extractTextFromPDF doesn't process
+// images, so there's no photo/cover-picture check here — that would be fabricated).
+//
+// The checklist items are enumerated explicitly in the prompt (not left for the AI to
+// invent) so the report shape stays stable across scans.
+func (s *aiServiceImpl) ScanLinkedInProfile(ctx context.Context, input *outbound.LinkedInScanInput) (*outbound.LinkedInScanResult, error) {
+	targetRoleLine := input.TargetRole
+	if targetRoleLine == "" {
+		targetRoleLine = "(not specified — infer the candidate's target role from the headline and most recent experience)"
+	}
+
+	prompt := fmt.Sprintf(`You are auditing a candidate's LinkedIn profile (exported as PDF, text below) against a
+fixed checklist, similar to a LinkedIn profile scanner report. For EACH check listed below,
+decide if it passes based ONLY on what's explicitly present in the profile text — do not
+assume something exists if it's not in the text. Write a short (1 sentence) explanation for
+each check, in Portuguese (pt-BR), justifying the pass/fail based on what you found (or
+didn't find).
+
+Target role: %s
+
+Checklist (return exactly these sections/checks, in this order, do not add or remove any):
+
+Informações básicas:
+- Nome completo presente
+- Localização (cidade/região) presente
+- Headline presente
+
+Alto impacto:
+- Headline tem tamanho adequado e não é genérica (ex.: mais do que só "Cargo at Empresa")
+- Seção "Sobre" está presente
+- Seção "Sobre" tem tamanho substantivo (pelo menos 3-4 frases com conteúdo real)
+
+Experiência profissional:
+- Todos os cargos listados têm descrição (não só título/empresa/datas)
+- Descrições usam resultados quantificados ou verbos de ação, não só lista de tarefas
+- Datas de todos os cargos estão presentes
+
+Skills:
+- Lista de skills está presente
+- Quantidade de skills é razoável (pelo menos 5)
+
+Formação:
+- Formação acadêmica está presente
+
+Also generate:
+- "predicted_skills": 3-6 skills that make sense for this candidate's target role/seniority
+  and are NOT already listed in their profile — label these clearly as suggestions, don't
+  claim they're already on the profile.
+- "tips": 2-4 short, specific, actionable recommendations in Portuguese (pt-BR), based on
+  what's actually missing/weak in THIS profile — no generic advice.
+
+Return ONLY a JSON object with this EXACT structure:
+{
+  "sections": [
+    {"name": "Informações básicas", "checks": [{"label": "Nome completo presente", "passed": true, "explanation": "..."}, ...]},
+    {"name": "Alto impacto", "checks": [...]},
+    {"name": "Experiência profissional", "checks": [...]},
+    {"name": "Skills", "checks": [...]},
+    {"name": "Formação", "checks": [...]}
+  ],
+  "predicted_skills": ["skill1", "skill2"],
+  "tips": ["tip1", "tip2"]
+}
+
+LinkedIn profile text:
+%s`, targetRoleLine, input.ProfileText)
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, linkedInScanMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		Sections []struct {
+			Name   string `json:"name"`
+			Checks []struct {
+				Label       string `json:"label"`
+				Passed      bool   `json:"passed"`
+				Explanation string `json:"explanation"`
+			} `json:"checks"`
+		} `json:"sections"`
+		PredictedSkills []string `json:"predicted_skills"`
+		Tips            []string `json:"tips"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse LinkedIn scan response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse LinkedIn scan response (cleaned): %w", err2)
+		}
+	}
+
+	sections := make([]domain.LinkedInScanSection, 0, len(raw.Sections))
+	total, passedCount := 0, 0
+	for _, s := range raw.Sections {
+		checks := make([]domain.LinkedInScanCheck, 0, len(s.Checks))
+		for _, c := range s.Checks {
+			checks = append(checks, domain.LinkedInScanCheck{
+				Label:       c.Label,
+				Passed:      c.Passed,
+				Explanation: c.Explanation,
+			})
+			total++
+			if c.Passed {
+				passedCount++
+			}
+		}
+		sections = append(sections, domain.LinkedInScanSection{Name: s.Name, Checks: checks})
+	}
+	if total == 0 {
+		return nil, fmt.Errorf("AI returned no checklist items for LinkedIn scan")
+	}
+
+	score := float64(passedCount) / float64(total) * 100
+
+	return &outbound.LinkedInScanResult{
+		Score:           score,
+		Sections:        sections,
+		PredictedSkills: raw.PredictedSkills,
+		Tips:            raw.Tips,
+	}, nil
 }
 
 // truncate shortens a string to at most n runes.

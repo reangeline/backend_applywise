@@ -27,6 +27,7 @@ func NewRouter(
 	pipelineCoachService inbound.PipelineCoachService,
 	interviewPracticeService inbound.InterviewPracticeService,
 	applyAssistService inbound.ApplyAssistService,
+	linkedInScanService inbound.LinkedInScanService,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -66,6 +67,7 @@ func NewRouter(
 	userHandler := handler.NewUserHandler(userService)
 	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService, interviewPracticeService)
 	applyAssistHandler := handler.NewApplyAssistHandler(applyAssistService)
+	linkedInScanHandler := handler.NewLinkedInScanHandler(linkedInScanService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -147,6 +149,11 @@ func NewRouter(
 			// (extensão de navegador). Não fica sob /pipeline/{jobId} porque acontece antes de
 			// a vaga existir no board (só é registrada depois que o usuário confirma o envio).
 			r.Post("/apply-assist/answer", applyAssistHandler.SuggestAnswer)
+
+			// LinkedIn Scan Report (spec 015) — audita o PDF exportado do perfil do
+			// LinkedIn do usuário contra um checklist fixo, guarda só o scan mais recente.
+			r.Post("/linkedin-scan", linkedInScanHandler.ScanProfile)
+			r.Get("/linkedin-scan", linkedInScanHandler.GetLatestScan)
 		})
 	})
 

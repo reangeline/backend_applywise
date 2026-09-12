@@ -31,6 +31,9 @@ var (
 	ErrPaymentFailed             = errors.New("payment failed")
 	ErrInvalidPaymentMethod      = errors.New("invalid payment method")
 
+	// LinkedIn scan errors
+	ErrLinkedInScanNotFound = errors.New("linkedin scan not found")
+
 	// Authorization errors
 	ErrUnauthorized = errors.New("unauthorized")
 	ErrForbidden    = errors.New("forbidden")

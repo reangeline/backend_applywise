@@ -1,6 +1,10 @@
 package outbound
 
-import "context"
+import (
+	"context"
+
+	"github.com/reangeline/backend_applywise/internal/core/domain"
+)
 
 type ResumeAnalysis struct {
 	Skills         []string               `json:"skills"`
@@ -181,6 +185,22 @@ type ResumeAdditionResult struct {
 	SuggestedText string
 }
 
+// LinkedInScanInput holds the extracted text of a user's LinkedIn profile PDF export, to be
+// audited against a fixed checklist (spec 015).
+type LinkedInScanInput struct {
+	ProfileText string
+	TargetRole  string // opcional — se vazio, a IA infere da headline/experiência
+}
+
+// LinkedInScanResult is the structured audit report — mirrors domain.LinkedInScan minus the
+// persistence fields (ID/UserID/timestamps), which the service layer fills in.
+type LinkedInScanResult struct {
+	Score           float64
+	Sections        []domain.LinkedInScanSection
+	PredictedSkills []string
+	Tips            []string
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -194,4 +214,5 @@ type AIService interface {
 	EvaluateInterviewAnswer(ctx context.Context, input *InterviewAnswerInput) (*InterviewAnswerResult, error)
 	SuggestApplyAnswer(ctx context.Context, input *ApplyAssistAnswerInput) (*ApplyAssistAnswerResult, error)
 	SuggestResumeAddition(ctx context.Context, input *ResumeAdditionInput) (*ResumeAdditionResult, error)
+	ScanLinkedInProfile(ctx context.Context, input *LinkedInScanInput) (*LinkedInScanResult, error)
 }
