@@ -84,7 +84,7 @@ type SuggestAdditionRequest struct {
 
 // SuggestAdditionResult holds the AI-suggested sentence.
 type SuggestAdditionResult struct {
-	SuggestedText string
+	SuggestedText string `json:"suggested_text"`
 }
 
 // ResumeOptimizerService define os casos de uso de otimização de currículo
